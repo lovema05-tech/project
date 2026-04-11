@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>학생 점수 조회 시스템</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>🎓 학생 점수 조회</h1>
+        <p class="subtitle">이름을 입력하여 본인의 점수를 확인하세요.</p>
+        
+        <div class="search-box">
+            <input type="text" id="studentName" placeholder="이름을 입력하세요 (예: 홍길동)" autocomplete="off">
+            <button id="searchBtn">조회하기</button>
+        </div>
+
+        <div id="resultArea" class="result-area hidden">
+            <div class="result-card">
+                <h2 id="displayName">홍길동 학생</h2>
+                <div class="score-display">
+                    <span class="label">점수</span>
+                    <span id="scoreValue" class="value">00</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="errorArea" class="error-area hidden">
+            <p id="errorMessage">이름을 찾을 수 없습니다. 다시 확인해 주세요.</p>
+        </div>
+
+        <div id="loadingArea" class="loading-area hidden">
+            <div class="spinner"></div>
+            <p>데이터를 불러오는 중...</p>
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
