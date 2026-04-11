@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>출석체크</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f0f4f8;
+      min-height: 100vh;
+      padding: 24px 16px;
+      color: #1a202c;
+    }
+
+    .container { max-width: 760px; margin: 0 auto; }
+
+    /* ── Header ── */
+    header {
+      background: linear-gradient(135deg, #4361ee, #7048e8);
+      color: white;
+      border-radius: 16px;
+      padding: 22px 28px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 20px rgba(67,97,238,0.35);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    header h1 { font-size: 1.5rem; font-weight: 700; }
+
+    .date-selector {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255,255,255,0.18);
+      border-radius: 10px;
+      padding: 6px 10px;
+    }
+
+    .date-selector input[type="date"] {
+      background: none;
+      border: none;
+      color: white;
+      font-size: 0.9rem;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .date-selector input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
+
+    /* ── Stats ── */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .stat-card {
+      background: white;
+      border-radius: 12px;
+      padding: 16px 10px;
+      text-align: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    }
+
+    .stat-card .val { font-size: 1.9rem; font-weight: 700; }
+    .stat-card .lbl { font-size: 0.73rem; color: #718096; margin-top: 2px; }
+    .stat-card.total   .val { color: #4361ee; }
+    .stat-card.present .val { color: #38a169; }
+    .stat-card.late    .val { color: #d69e2e; }
+    .stat-card.absent  .val { color: #e53e3e; }
+
+    /* ── Controls ── */
+    .controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+
+    .controls input {
+      flex: 1;
+      min-width: 180px;
+      padding: 10px 14px;
+      border: 2px solid #e2e8f0;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .controls input:focus { border-color: #4361ee; }
+
+    .btn {
+      padding: 10px 18px;
+      border: none;
+      border-radius: 10px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+
+    .btn:active { transform: scale(0.97); }
+    .btn:hover  { opacity: 0.85; }
+    .btn-primary { background: #4361ee; color: white; }
+    .btn-success { background: #38a169; color: white; }
+    .btn-warning { background: #d69e2e; color: white; }
+    .btn-danger  { background: #e53e3e; color: white; }
+    .btn-gray    { background: #e2e8f0; color: #4a5568; }
+    .btn-sm      { padding: 7px 13px; font-size: 0.82rem; }
+
+    /* ── Bulk ── */
+    .bulk-actions {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .bulk-actions .lbl {
+      font-size: 0.82rem;
+      color: #718096;
+      margin-right: 2px;
+    }
+
+    /* ── Student cards ── */
+    .student-list { display: flex; flex-direction: column; gap: 10px; }
+
+    .student-card {
+      background: white;
+      border-radius: 12px;
+      padding: 13px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      border-left: 4px solid #e2e8f0;
+      transition: border-color 0.2s;
+    }
+
+    .student-card.present { border-left-color: #38a169; }
+    .student-card.late    { border-left-color: #d69e2e; }
+    .student-card.absent  { border-left-color: #e53e3e; }
+
+    .student-num {
+      width: 30px; height: 30px;
+      background: #edf2f7;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.78rem; font-weight: 700; color: #718096;
+      flex-shrink: 0;
+    }
+
+    .student-name { flex: 1; font-weight: 600; font-size: 0.93rem; }
+
+    .status-badge {
+      font-size: 0.75rem; font-weight: 600;
+      padding: 3px 10px; border-radius: 20px;
+      background: #edf2f7; color: #718096;
+      flex-shrink: 0;
+    }
+
+    .student-card.present .status-badge { background: #c6f6d5; color: #276749; }
+    .student-card.late    .status-badge { background: #fefcbf; color: #744210; }
+    .student-card.absent  .status-badge { background: #fed7d7; color: #822727; }
+
+    .att-buttons { display: flex; gap: 5px; flex-shrink: 0; }
+
+    .att-btn {
+      padding: 5px 11px;
+      border: 2px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 0.78rem; font-weight: 600;
+      cursor: pointer;
+      background: white; color: #4a5568;
+      transition: all 0.15s;
+    }
+
+    .att-btn:hover { opacity: 0.8; }
+    .att-btn.a-present { background: #38a169; color: white; border-color: #38a169; }
+    .att-btn.a-late    { background: #d69e2e; color: white; border-color: #d69e2e; }
+    .att-btn.a-absent  { background: #e53e3e; color: white; border-color: #e53e3e; }
+
+    .del-btn {
+      background: none; border: none;
+      cursor: pointer; color: #cbd5e0;
+      font-size: 1.05rem; padding: 4px;
+      transition: color 0.15s;
+    }
+
+    .del-btn:hover { color: #e53e3e; }
+
+    .empty-msg { text-align: center; padding: 36px; color: #a0aec0; font-size: 0.93rem; }
+
+    /* ── Footer ── */
+    .footer-actions {
+      margin-top: 18px;
+      display: flex; gap: 10px;
+      justify-content: space-between;
+      flex-wrap: wrap;
+    }
+
+    .footer-left, .footer-right { display: flex; gap: 10px; flex-wrap: wrap; }
+
+    /* ── History modal ── */
+    .overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.45);
+      z-index: 100;
+      align-items: center; justify-content: center;
+    }
+
+    .overlay.open { display: flex; }
+
+    .modal {
+      background: white;
+      border-radius: 16px;
+      padding: 28px;
+      width: min(600px, 95vw);
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.2);
+    }
+
+    .modal-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 18px;
+    }
+
+    .modal-header h2 { font-size: 1.1rem; font-weight: 700; color: #4361ee; }
+
+    .close-btn {
+      background: none; border: none;
+      font-size: 1.3rem; cursor: pointer; color: #718096;
+    }
+
+    .history-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .history-table th { background: #edf2f7; padding: 8px 12px; text-align: left; color: #4a5568; }
+    .history-table td { padding: 8px 12px; border-bottom: 1px solid #f0f2fa; }
+
+    /* Toast */
+    .toast {
+      position: fixed; bottom: 24px; left: 50%;
+      transform: translateX(-50%) translateY(50px);
+      background: #2d3748; color: white;
+      padding: 10px 22px; border-radius: 24px;
+      font-size: 0.87rem; opacity: 0;
+      transition: all 0.3s; z-index: 200;
+    }
+
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    @media (max-width: 520px) {
+      .stats { grid-template-columns: repeat(2, 1fr); }
+      .att-btn { padding: 5px 8px; font-size: 0.72rem; }
+      header { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <header>
+    <h1>📋 출석체크</h1>
+    <div class="date-selector">
+      <input type="date" id="dateInput" />
+    </div>
+  </header>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat-card total">
+      <div class="val" id="statTotal">0</div>
+      <div class="lbl">전체</div>
+    </div>
+    <div class="stat-card present">
+      <div class="val" id="statPresent">0</div>
+      <div class="lbl">출석</div>
+    </div>
+    <div class="stat-card late">
+      <div class="val" id="statLate">0</div>
+      <div class="lbl">지각</div>
+    </div>
+    <div class="stat-card absent">
+      <div class="val" id="statAbsent">0</div>
+      <div class="lbl">결석</div>
+    </div>
+  </div>
+
+  <!-- Add student -->
+  <div class="controls">
+    <input type="text" id="nameInput" placeholder="학생 이름 입력 후 Enter" maxlength="20" />
+    <button class="btn btn-primary" onclick="addStudent()">+ 추가</button>
+  </div>
+
+  <!-- Bulk actions -->
+  <div class="bulk-actions">
+    <span class="lbl">전체 처리:</span>
+    <button class="btn btn-sm btn-success" onclick="markAll('present')">출석</button>
+    <button class="btn btn-sm btn-warning" onclick="markAll('late')">지각</button>
+    <button class="btn btn-sm btn-danger"  onclick="markAll('absent')">결석</button>
+    <button class="btn btn-sm btn-gray"    onclick="markAll(null)">초기화</button>
+  </div>
+
+  <!-- Student list -->
+  <div class="student-list" id="studentList"></div>
+
+  <!-- Footer -->
+  <div class="footer-actions">
+    <div class="footer-left">
+      <button class="btn btn-gray btn-sm" onclick="openHistory()">기록 보기</button>
+    </div>
+    <div class="footer-right">
+      <button class="btn btn-gray btn-sm" onclick="exportCSV()">CSV 내보내기</button>
+      <button class="btn btn-danger btn-sm" onclick="clearStudents()">학생 전체 삭제</button>
+    </div>
+  </div>
+</div>
+
+<!-- History Modal -->
+<div class="overlay" id="overlay" onclick="closeHistory(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>출석 기록</h2>
+      <button class="close-btn" onclick="closeHistory()">&#x2715;</button>
+    </div>
+    <div id="historyContent"></div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+  const STUDENTS_KEY = 'att_students';
+  const RECORDS_KEY  = 'att_records';
+
+  // students: [{ id, name }]
+  // records:  { "YYYY-MM-DD": { id: "present"|"late"|"absent"|null } }
+  let students = [];
+  let records  = {};
+  let today    = isoDate(new Date());
+
+  // ── Init ─────────────────────────────────────────────
+  function init() {
+    students = JSON.parse(localStorage.getItem(STUDENTS_KEY) || '[]');
+    records  = JSON.parse(localStorage.getItem(RECORDS_KEY)  || '{}');
+
+    if (students.length === 0) {
+      // 기본 예시
+      students = [
+        { id: uid(), name: '김민준' },
+        { id: uid(), name: '이서연' },
+        { id: uid(), name: '박지호' },
+        { id: uid(), name: '최유진' },
+        { id: uid(), name: '정하은' },
+      ];
+      persist();
+    }
+
+    const dateInput = document.getElementById('dateInput');
+    dateInput.value = today;
+    dateInput.addEventListener('change', render);
+
+    document.getElementById('nameInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') addStudent();
+    });
+
+    render();
+  }
+
+  // ── Helpers ───────────────────────────────────────────
+  function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+  function isoDate(d) { return d.toISOString().slice(0, 10); }
+
+  function selectedDate() { return document.getElementById('dateInput').value || today; }
+
+  function dayRecord() {
+    const d = selectedDate();
+    if (!records[d]) records[d] = {};
+    return records[d];
+  }
+
+  function getStatus(id) { return dayRecord()[id] ?? null; }
+
+  function labelOf(status) {
+    return { present: '출석', late: '지각', absent: '결석' }[status] ?? '미체크';
+  }
+
+  function esc(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function persist() {
+    localStorage.setItem(STUDENTS_KEY, JSON.stringify(students));
+    localStorage.setItem(RECORDS_KEY,  JSON.stringify(records));
+  }
+
+  // ── Student CRUD ──────────────────────────────────────
+  function addStudent() {
+    const input = document.getElementById('nameInput');
+    const name  = input.value.trim();
+    if (!name) return;
+    if (students.find(s => s.name === name)) { showToast('이미 존재하는 이름입니다.'); return; }
+    students.push({ id: uid(), name });
+    input.value = '';
+    persist();
+    render();
+    showToast(`${name} 추가됨`);
+  }
+
+  function deleteStudent(id) {
+    const s = students.find(s => s.id === id);
+    if (!s) return;
+    if (!confirm(`"${s.name}"을(를) 삭제할까요?`)) return;
+    students = students.filter(s => s.id !== id);
+    persist();
+    render();
+  }
+
+  function clearStudents() {
+    if (!confirm('모든 학생과 출석 기록을 삭제할까요?')) return;
+    students = [];
+    records  = {};
+    persist();
+    render();
+    showToast('초기화 완료');
+  }
+
+  // ── Attendance ────────────────────────────────────────
+  function setStatus(id, status) {
+    const dr = dayRecord();
+    dr[id] = (dr[id] === status) ? null : status;
+    persist();
+    render();
+  }
+
+  function markAll(status) {
+    const dr = dayRecord();
+    students.forEach(s => { dr[s.id] = status; });
+    persist();
+    render();
+  }
+
+  // ── Render ────────────────────────────────────────────
+  function render() {
+    updateStats();
+    const list = document.getElementById('studentList');
+
+    if (students.length === 0) {
+      list.innerHTML = '<div class="empty-msg">학생을 추가해주세요.</div>';
+      return;
+    }
+
+    list.innerHTML = students.map((s, i) => {
+      const st = getStatus(s.id);
+      const ab = (cls) => `<button class="att-btn ${st === cls ? 'a-' + cls : ''}"
+        onclick="setStatus('${s.id}','${cls}')">${labelOf(cls)}</button>`;
+      return `
+        <div class="student-card ${st || ''}">
+          <div class="student-num">${i + 1}</div>
+          <div class="student-name">${esc(s.name)}</div>
+          <span class="status-badge">${labelOf(st)}</span>
+          <div class="att-buttons">
+            ${ab('present')}${ab('late')}${ab('absent')}
+          </div>
+          <button class="del-btn" onclick="deleteStudent('${s.id}')" title="삭제">&#x2715;</button>
+        </div>`;
+    }).join('');
+  }
+
+  function updateStats() {
+    const total   = students.length;
+    const present = students.filter(s => getStatus(s.id) === 'present').length;
+    const late    = students.filter(s => getStatus(s.id) === 'late').length;
+    const absent  = students.filter(s => getStatus(s.id) === 'absent').length;
+    document.getElementById('statTotal').textContent   = total;
+    document.getElementById('statPresent').textContent = present;
+    document.getElementById('statLate').textContent    = late;
+    document.getElementById('statAbsent').textContent  = absent;
+  }
+
+  // ── CSV Export ────────────────────────────────────────
+  function exportCSV() {
+    const date = selectedDate();
+    let csv = `날짜,번호,이름,출석상태\n`;
+    students.forEach((s, i) => {
+      csv += `${date},${i + 1},${s.name},${labelOf(getStatus(s.id))}\n`;
+    });
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = `출석_${date}.csv`; a.click();
+    URL.revokeObjectURL(url);
+    showToast('CSV 다운로드 완료');
+  }
+
+  // ── History Modal ─────────────────────────────────────
+  function openHistory() {
+    const dates = Object.keys(records).sort().reverse();
+    const content = document.getElementById('historyContent');
+
+    if (dates.length === 0) {
+      content.innerHTML = '<div class="empty-msg">기록이 없습니다.</div>';
+    } else {
+      content.innerHTML = dates.map(date => {
+        const dr   = records[date];
+        const rows = students.map((s, i) => {
+          const st = dr[s.id] ?? null;
+          return `<tr>
+            <td>${i + 1}</td>
+            <td>${esc(s.name)}</td>
+            <td>${labelOf(st)}</td>
+          </tr>`;
+        }).join('');
+        return `
+          <div style="margin-bottom:20px">
+            <strong style="color:#4361ee;font-size:.9rem">${date}</strong>
+            <table class="history-table" style="margin-top:8px">
+              <thead><tr><th>#</th><th>이름</th><th>상태</th></tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>`;
+      }).join('');
+    }
+
+    document.getElementById('overlay').classList.add('open');
+  }
+
+  function closeHistory(e) {
+    if (!e || e.target === document.getElementById('overlay')) {
+      document.getElementById('overlay').classList.remove('open');
+    }
+  }
+
+  // ── Toast ─────────────────────────────────────────────
+  let toastTimer;
+  function showToast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 2000);
+  }
+
+  init();
+</script>
+</body>
+</html>
