@@ -216,7 +216,8 @@ with tab3:
         st.warning("데이터 관리 탭에서 엑셀 서식을 먼저 업로드 해주세요.")
     else:
         name_col, _, _ = get_columns(current_df)
-        students = current_df[name_col].tolist()
+        num_col = 'student_num' if 'student_num' in current_df.columns else '학번'
+        students = current_df.apply(lambda row: f"[{row[num_col]}] {row[name_col]}", axis=1).tolist()
         
         _, col_center, _ = st.columns([1, 2, 1])
         
