@@ -147,16 +147,21 @@ with tab2:
     if current_df.empty:
         st.warning("데이터 관리 탭에서 엑셀 서식을 먼저 업로드 해주세요.")
     else:
+        name_col, gender_col, score_col = get_columns(current_df)
+        num_col = 'student_num' if 'student_num' in current_df.columns else '학번'
+        
         col1, col2 = st.columns(2)
         with col1:
             group_size = st.number_input("한 모둠당 기본 학생 수 (N명)", min_value=2, value=4, step=1)
+            
+        student_options = current_df.apply(lambda row: f"[{row[num_col]}] {row[name_col]}", axis=1).tolist()
+        separated_students = st.multiselect("⚠️ 서로 무조건 다른 조로 분배할 학생들 (기피 학생)", options=student_options, help="여기에 추가된 학생들은 모두 제각기 별도의 조에 흩어져 배치됩니다.")
             
         st.info(f"💡 전체 인원({len(current_df)}명)을 바탕으로 모둠 간 인원수 차이가 최대 1명이 되도록(예: 4명/5명 또는 3명/4명 조합) 가장 균형 있게 분배됩니다.")
         
         if st.button("모둠 자동 구성 시작", type="primary"):
             with st.spinner("최적의 균형을 계산하고 있습니다..."):
                 time.sleep(1) # 부드러운 전환 효과용
-                name_col, gender_col, score_col = get_columns(current_df)
                 
                 males_list = current_df[current_df[gender_col] == '남'].to_dict('records')
                 females_list = current_df[current_df[gender_col] == '여'].to_dict('records')
@@ -185,18 +190,44 @@ with tab2:
                 
                 # 2. 학업 성취도(점수) 최상위부터 순차적으로 그리디 배정
                 all_students = current_df.sort_values(by=score_col, ascending=False).to_dict('records')
+                fallback_warning = False
                 
                 for student in all_students:
                     gender = student[gender_col]
+                    student_str = f"[{student[num_col]}] {student[name_col]}"
+                    is_enemy = (student_str in separated_students)
                     
-                    # 2-1. 정원이 남아있는 조 필터링
+                    # 2-1. 정원이 남아있는 조 필터링 (기피 조건 우선 적용)
                     valid_groups = []
                     for g in groups_info:
+                        has_room = False
                         if gender == '남' and len(g['males']) < g['target_M']:
-                            valid_groups.append(g)
+                            has_room = True
                         elif gender == '여' and len(g['females']) < g['target_F']:
-                            valid_groups.append(g)
+                            has_room = True
                             
+                        if has_room:
+                            # 사이가 나쁜 학생이 이미 해당 조에 있는지 검사
+                            has_other_enemy = False
+                            if is_enemy:
+                                for member in g['males'] + g['females']:
+                                    member_str = f"[{member[num_col]}] {member[name_col]}"
+                                    if member_str in separated_students:
+                                        has_other_enemy = True
+                                        break
+                            
+                            if not has_other_enemy:
+                                valid_groups.append(g)
+                                
+                    # 2-2. 예외 처리: 만약 기피 학생 수가 너무 많아 모든 유효한 조가 막혔다면 룰을 완화(Fallback)
+                    if not valid_groups:
+                        fallback_warning = True
+                        for g in groups_info:
+                            if gender == '남' and len(g['males']) < g['target_M']:
+                                valid_groups.append(g)
+                            elif gender == '여' and len(g['females']) < g['target_F']:
+                                valid_groups.append(g)
+                                
                     if not valid_groups:
                         continue
                         
@@ -214,6 +245,9 @@ with tab2:
                 
                 # 3. 화면 출력을 위해 포맷 변환
                 groups = [g['males'] + g['females'] for g in groups_info]
+                
+                if fallback_warning:
+                    st.warning("🚨 분리하려는 학생 수가 전체 모둠 수보다 많거나 성별 정원 제한과 충돌하여 부득이하게 일부 기피 학생이 같은 조에 배정되었습니다.")
                 
                 st.success(f"🎉 총 {num_groups}개의 모둠이 편성되었습니다!")
                 
