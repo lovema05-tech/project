@@ -158,30 +158,62 @@ with tab2:
                 time.sleep(1) # 부드러운 전환 효과용
                 name_col, gender_col, score_col = get_columns(current_df)
                 
-                # 남여 분리 및 성적(내림차순) 정렬
-                males = current_df[current_df[gender_col] == '남'].sort_values(by=score_col, ascending=False).to_dict('records')
-                females = current_df[current_df[gender_col] == '여'].sort_values(by=score_col, ascending=False).to_dict('records')
+                males_list = current_df[current_df[gender_col] == '남'].to_dict('records')
+                females_list = current_df[current_df[gender_col] == '여'].to_dict('records')
                 
                 total_students = len(current_df)
                 num_groups = max(1, round(total_students / group_size))
                 
-                groups = [[] for _ in range(num_groups)]
+                # 1. 각 모둠별 목표 성별 정원(Capacity) 철저히 계산
+                m_base = len(males_list) // num_groups
+                m_extra = len(males_list) % num_groups
+                f_base = len(females_list) // num_groups
+                f_extra = len(females_list) % num_groups
                 
-                # 전역 상태를 유지하면서 지그재그(Snake) 분배
-                idx = 0
-                direction = 1
+                groups_info = []
+                for i in range(num_groups):
+                    m_cap = m_base + (1 if i < m_extra else 0)
+                    f_cap = f_base + (1 if (num_groups - 1 - i) < f_extra else 0)
+                    groups_info.append({
+                        'target_M': m_cap,
+                        'target_F': f_cap,
+                        'target_total': m_cap + f_cap,
+                        'males': [],
+                        'females': [],
+                        'current_sum': 0
+                    })
                 
-                # 남학생 먼저, 그 다음 여학생을 이어서 분배 (상태 유지)
-                for gender_group in [males, females]:
-                    for student in gender_group:
-                        groups[idx].append(student)
-                        idx += direction
-                        if idx >= num_groups:
-                            direction = -1
-                            idx = num_groups - 1
-                        elif idx < 0:
-                            direction = 1
-                            idx = 0
+                # 2. 학업 성취도(점수) 최상위부터 순차적으로 그리디 배정
+                all_students = current_df.sort_values(by=score_col, ascending=False).to_dict('records')
+                
+                for student in all_students:
+                    gender = student[gender_col]
+                    
+                    # 2-1. 정원이 남아있는 조 필터링
+                    valid_groups = []
+                    for g in groups_info:
+                        if gender == '남' and len(g['males']) < g['target_M']:
+                            valid_groups.append(g)
+                        elif gender == '여' and len(g['females']) < g['target_F']:
+                            valid_groups.append(g)
+                            
+                    if not valid_groups:
+                        continue
+                        
+                    # 2-2. (현재 누적 점수 / 목표 조 인원) 비율이 가장 낮아 점수 보충이 시급한 조 선택
+                    # 비율이 동일하면 현재 배정된 총인원이 적은 조부터 채움
+                    valid_groups.sort(key=lambda x: (x['current_sum'] / max(1, x['target_total']), len(x['males']) + len(x['females'])))
+                    
+                    target_g = valid_groups[0]
+                    if gender == '남':
+                        target_g['males'].append(student)
+                    else:
+                        target_g['females'].append(student)
+                        
+                    target_g['current_sum'] += student[score_col]
+                
+                # 3. 화면 출력을 위해 포맷 변환
+                groups = [g['males'] + g['females'] for g in groups_info]
                 
                 st.success(f"🎉 총 {num_groups}개의 모둠이 편성되었습니다!")
                 
