@@ -191,7 +191,9 @@ if uploaded_file is not None:
                                 unit_name = str(row[3]).strip()
                                 unit_code = str(row[4]).strip()
                                 
-                                if pd.isna(row[3]) or unit_name == 'nan' or unit_name == '내용영역(능력단위)' or unit_name == '내용영역합계':
+                                # 공백 제거 후 비교 (내용 영역 합계 등 띄어쓰기 대응)
+                                clean_unit_name = unit_name.replace(" ", "")
+                                if pd.isna(row[3]) or unit_name == 'nan' or clean_unit_name == '내용영역(능력단위)' or clean_unit_name == '내용영역합계':
                                     continue
                                 
                                 training_hours = int(row[5]) if pd.notna(row[5]) and str(row[5]).isdigit() else 0
