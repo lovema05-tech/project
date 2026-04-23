@@ -66,7 +66,7 @@ for ncs in ncs_data:
     total_credits = sched_info['total_credits']
     schedule_credit_map[subject_name] = total_credits
     
-    # 총 이수 학점 (엑셀에서 파싱된 학기별 학점의 총합)
+    # 엑셀에서 파싱된 각 능력단위의 이수학점 총합
     ncs_total_credits = (
         (ncs['grade_1_sem_1_credits'] or 0) + (ncs['grade_1_sem_2_credits'] or 0) +
         (ncs['grade_2_sem_1_credits'] or 0) + (ncs['grade_2_sem_2_credits'] or 0) +
@@ -79,16 +79,14 @@ for ncs in ncs_data:
         "능력단위명": ncs['unit_name'],
         "능력단위 수준": ncs['unit_level'],
         "NCS 훈련시간": ncs['training_hours'],
-        "배정 학점 합계": ncs_total_credits, # 엑셀에서 파싱된 해당 능력단위의 이수학점 합계
-        "이론 학점 (입력)": ncs['theory_hours'] or 0,
-        "실습 학점 (입력)": ncs['practice_hours'] or 0,
+        "NCS 배정 학점": ncs_total_credits
     })
 
 df = pd.DataFrame(rows)
 
 # 3. 과목별 학점 검증 로직
-st.markdown("### 📊 과목별 이론/실습 학점 동기화 검증")
-st.caption("각 과목에 속한 능력단위들의 '이론 학점'과 '실습 학점'의 총합은, 편제표 상의 **'과목 총 학점'**과 정확히 일치해야 합니다.")
+st.markdown("### 📊 실무과목 학점 동기화 검증")
+st.caption("엑셀의 **'실무과목 능력단위'** 시트에 배정된 학점의 총합이 편제표의 과목 학점과 일치하는지 자동으로 검증합니다.")
 
 validation_passed = True
 cols = st.columns(3)
@@ -99,74 +97,40 @@ for subject, target_credits in schedule_credit_map.items():
     if subject_df.empty:
         continue
         
-    current_theory = subject_df["이론 학점 (입력)"].sum()
-    current_practice = subject_df["실습 학점 (입력)"].sum()
-    current_total = current_theory + current_practice
+    current_total = subject_df["NCS 배정 학점"].sum()
     
     with cols[col_idx % 3]:
         if current_total == target_credits:
             st.success(f"**{subject}**\n\n✅ {current_total} / {target_credits} 학점 (일치)")
         else:
             validation_passed = False
-            st.error(f"**{subject}**\n\n⚠️ {current_total} / {target_credits} 학점 (불일치!)\n이론({current_theory}) + 실습({current_practice})")
+            st.error(f"**{subject}**\n\n⚠️ {current_total} / {target_credits} 학점 (불일치! 엑셀 확인 요망)")
     col_idx += 1
 
 st.divider()
 
-# 4. Ag-Grid를 통한 데이터 편집
-st.markdown("### 📝 이론/실습 학점 분배하기")
-st.info("아래 표에서 **'이론 학점 (입력)'** 및 **'실습 학점 (입력)'** 열을 더블 클릭하여 숫자를 수정하세요.")
+# 4. Ag-Grid를 통한 데이터 조회
+st.markdown("### 📋 NCS 능력단위 매핑 현황 (조회 전용)")
+st.info("이 데이터는 엑셀 파일에서 자동으로 불러온 값입니다. 수정이 필요하다면 엑셀 파일을 수정한 뒤 다시 업로드 해주세요.")
 
-gb = GridOptionsBuilder.from_dataframe(df.drop(columns=["id"]))
+if not df.empty:
+    gb = GridOptionsBuilder.from_dataframe(df.drop(columns=["id"]))
 
-# 읽기 전용 컬럼 설정
-gb.configure_column("과목명", editable=False, rowGroup=True, hide=True) # 과목명으로 그룹화
-gb.configure_column("능력단위명", editable=False)
-gb.configure_column("능력단위 수준", editable=False)
-gb.configure_column("NCS 훈련시간", editable=False)
-gb.configure_column("배정 학점 합계", editable=False)
+    gb.configure_column("과목명", rowGroup=True, hide=True) # 과목명으로 그룹화
+    gb.configure_column("NCS 배정 학점", type=["numericColumn", "numberColumnFilter"])
 
-# 편집 가능 컬럼 설정
-gb.configure_column("이론 학점 (입력)", editable=True, type=["numericColumn", "numberColumnFilter"], 
-                    cellStyle={'backgroundColor': '#e8f4f8', 'fontWeight': 'bold'})
-gb.configure_column("실습 학점 (입력)", editable=True, type=["numericColumn", "numberColumnFilter"], 
-                    cellStyle={'backgroundColor': '#f8f4e8', 'fontWeight': 'bold'})
+    gb.configure_grid_options(groupDefaultExpanded=1) # 기본으로 그룹 펼치기
+    gridOptions = gb.build()
 
-gb.configure_grid_options(groupDefaultExpanded=1) # 기본으로 그룹 펼치기
-gridOptions = gb.build()
-
-grid_response = AgGrid(
-    df,
-    gridOptions=gridOptions,
-    update_mode=GridUpdateMode.MODEL_CHANGED,
-    data_return_mode=DataReturnMode.AS_INPUT,
-    fit_columns_on_grid_load=True,
-    theme="streamlit",
-    height=500
-)
-
-# 5. 저장 로직
-edited_df = grid_response['data']
-
-col1, col2 = st.columns([1, 4])
-with col1:
-    if st.button("💾 변경사항 저장", type="primary", use_container_width=True):
-        with st.spinner("저장 중..."):
-            try:
-                for idx, row in edited_df.iterrows():
-                    ncs_id = df.iloc[idx]["id"] # 원본 df에서 id 추출
-                    t_hours = int(row["이론 학점 (입력)"]) if pd.notna(row["이론 학점 (입력)"]) else 0
-                    p_hours = int(row["실습 학점 (입력)"]) if pd.notna(row["실습 학점 (입력)"]) else 0
-                    
-                    supabase.table("ncs_units").update({
-                        "theory_hours": t_hours,
-                        "practice_hours": p_hours
-                    }).eq("id", ncs_id).execute()
-                    
-                st.success("성공적으로 저장되었습니다!")
-                st.rerun()
-            except Exception as e:
-                st.error(f"저장 중 오류가 발생했습니다: {e}")
+    AgGrid(
+        df,
+        gridOptions=gridOptions,
+        fit_columns_on_grid_load=True,
+        theme="streamlit",
+        height=500
+    )
 
 if not validation_passed:
-    st.warning("⚠️ 아직 편제표 학점과 동기화되지 않은 과목이 있습니다. 상단의 에러 박스를 확인하여 이론/실습 학점을 정확히 맞춰주세요.")
+    st.warning("⚠️ 편제표 학점과 능력단위 배정 학점이 불일치하는 과목이 있습니다. 엑셀 파일의 '실무과목 능력단위' 시트를 점검 후 재업로드 해주세요.")
+else:
+    st.success("🎉 모든 실무과목의 NCS 학점이 편제표와 완벽하게 일치합니다!")
