@@ -101,8 +101,21 @@ if "부장" in user_role:
             gb.configure_default_column(editable=True, resizable=True, sortable=True)
             gb.configure_column("id", hide=True)
             gb.configure_column("subject_id", hide=True)
-                gb.configure_column(col, type=["numericColumn", "numberColumnFilter"])
-                
+            
+            # 컬럼 너비 및 속성 설정
+            gb.configure_column("필수/선택", width=100, cellEditor='agSelectCellEditor', cellEditorParams={'values': ["필수", "선택"]})
+            gb.configure_column("교과영역", width=120)
+            gb.configure_column("교과군", width=150, cellEditor='agSelectCellEditor', cellEditorParams={'values': unique_groups})
+            gb.configure_column("과목명", width=200)
+            gb.configure_column("기본 학점", width=100)
+            gb.configure_column("운영가능 학점", width=120)
+            gb.configure_column("운영 학점", width=100, editable=False)
+            
+            # 학기별 컬럼 설정
+            sem_cols = ["1-1", "1-2", "2-1", "2-2", "3-1", "3-2"]
+            for col in sem_cols:
+                gb.configure_column(col, width=80, type=["numericColumn", "numberColumnFilter"])
+            
             gridOptions = gb.build()
             
             st.info("💡 엑셀처럼 탭(Tab)키나 방향키로 이동하며 자유롭게 수정하세요. 표 아래쪽의 빈칸에 새 과목을 입력할 수 있습니다.")
