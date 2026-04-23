@@ -169,7 +169,7 @@ if "부장" in user_role:
                             supabase.table("curriculum_schedules").delete().eq("id", d_id).execute()
                             
                         # NaN 값을 기본값으로 처리
-                        save_df = edited_df.fillna({"과목명": "", "교과영역": "", "교과군": "", "기준학점": "0", "1-1": 0, "1-2": 0, "2-1": 0, "2-2": 0, "3-1": 0, "3-2": 0})
+                        save_df = edited_df.fillna({"과목명": "", "교과영역": "", "교과군": "", "기본 학점": "0", "운영가능 학점": "", "1-1": 0, "1-2": 0, "2-1": 0, "2-2": 0, "3-1": 0, "3-2": 0})
                         
                         for index, row in save_df.iterrows():
                             if not str(row["과목명"]).strip():
@@ -181,13 +181,17 @@ if "부장" in user_role:
                             subject_res = supabase.table("subjects").select("id").eq("name", row["과목명"]).execute()
                             if subject_res.data:
                                 subject_id = subject_res.data[0]["id"]
-                                supabase.table("subjects").update({"base_credits": str(row["기준학점"])}).eq("id", subject_id).execute()
+                                supabase.table("subjects").update({
+                                    "base_credits": str(row["기본 학점"]),
+                                    "operable_credits": str(row["운영가능 학점"])
+                                }).eq("id", subject_id).execute()
                             else:
                                 new_sub = supabase.table("subjects").insert({
                                     "category": row["교과영역"],
                                     "subject_group": row["교과군"],
                                     "name": row["과목명"],
-                                    "base_credits": str(row["기준학점"])
+                                    "base_credits": str(row["기본 학점"]),
+                                    "operable_credits": str(row["운영가능 학점"])
                                 }).execute()
                                 subject_id = new_sub.data[0]["id"]
                                 
