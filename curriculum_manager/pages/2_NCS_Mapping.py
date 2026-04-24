@@ -76,6 +76,7 @@ for ncs in ncs_data:
     rows.append({
         "id": ncs['id'],
         "과목명": subject_name,
+        "능력단위 코드": ncs['unit_code'],
         "능력단위명": ncs['unit_name'],
         "능력단위 수준": ncs['unit_level'],
         "NCS 훈련시간": ncs['training_hours'],
@@ -87,6 +88,24 @@ df = pd.DataFrame(rows)
 # 3. 과목별 학점 검증 로직
 st.markdown("### 📊 실무과목 학점 동기화 검증")
 st.caption("엑셀의 **'실무과목 능력단위'** 시트에 배정된 학점의 총합이 편제표의 과목 학점과 일치하는지 자동으로 검증합니다.")
+
+# 능력단위 코드 일관성 검사 (코드 하나가 여러 과목에 쓰였는지 확인)
+code_to_subjects = {}
+for row_idx, row in df.iterrows():
+    code = row['능력단위 코드']
+    subject = row['과목명']
+    if pd.isna(code) or not str(code).strip():
+        continue
+    if code not in code_to_subjects:
+        code_to_subjects[code] = set()
+    code_to_subjects[code].add(subject)
+
+inconsistent_codes = {code: subs for code, subs in code_to_subjects.items() if len(subs) > 1}
+if inconsistent_codes:
+    st.warning("⚠️ **능력단위 코드 중복 경고: 동일한 코드가 서로 다른 과목에서 사용되고 있습니다.**")
+    for code, subs in inconsistent_codes.items():
+        st.write(f"- 코드 `{code}`: {', '.join(subs)}")
+    st.divider()
 
 validation_passed = True
 cols = st.columns(3)
