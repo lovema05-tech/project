@@ -199,8 +199,12 @@ if uploaded_file is not None:
                                 training_hours = int(row[5]) if pd.notna(row[5]) and str(row[5]).isdigit() else 0
                                 unit_level = str(row[6]) if pd.notna(row[6]) else ""
                                 
-                                # 1. 과목명으로 subject_id 조회
+                                # 1. 과목명으로 subject_id 조회 (컨텐츠/콘텐츠 오타 대응)
                                 sub_res = supabase.table("subjects").select("id").eq("name", subject_name).execute()
+                                if not sub_res.data:
+                                    match_name = subject_name.replace("컨텐츠", "콘텐츠")
+                                    sub_res = supabase.table("subjects").select("id").eq("name", match_name).execute()
+                                
                                 if not sub_res.data:
                                     continue
                                 subject_id = sub_res.data[0]['id']
