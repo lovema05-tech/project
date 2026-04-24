@@ -75,25 +75,25 @@ for ncs in ncs_data:
     
     rows.append({
         "id": ncs['id'],
-        "과목명": subject_name,
+        "실무과목": subject_name,
         "능력단위 코드": ncs['unit_code'],
-        "능력단위명": ncs['unit_name'],
-        "능력단위 수준": ncs['unit_level'],
-        "NCS 훈련시간": ncs['training_hours'],
-        "NCS 배정 학점": ncs_total_credits
+        "내용영역 (능력단위)": ncs['unit_name'],
+        "수준": ncs['unit_level'],
+        "훈련시간": ncs['training_hours'],
+        "NCS 학점": ncs_total_credits
     })
 
 df = pd.DataFrame(rows)
 
 # 3. 과목별 학점 검증 로직
-st.markdown("### 📊 실무과목 학점 동기화 검증")
-st.caption("엑셀의 **'실무과목 능력단위'** 시트에 배정된 학점의 총합이 편제표의 과목 학점과 일치하는지 자동으로 검증합니다.")
+st.markdown("### 📊 실무과목별 NCS 매핑 검증")
+st.caption("실무과목 내에 편성된 각 내용영역(능력단위) 학점의 총합이 편제표와 일치하는지 확인합니다.")
 
-# 능력단위 코드 일관성 검사 (코드 하나가 여러 과목에 쓰였는지 확인)
+# 능력단위 코드 일관성 검사
 code_to_subjects = {}
 for row_idx, row in df.iterrows():
     code = row['능력단위 코드']
-    subject = row['과목명']
+    subject = row['실무과목']
     if pd.isna(code) or not str(code).strip():
         continue
     if code not in code_to_subjects:
@@ -102,7 +102,7 @@ for row_idx, row in df.iterrows():
 
 inconsistent_codes = {code: subs for code, subs in code_to_subjects.items() if len(subs) > 1}
 if inconsistent_codes:
-    st.warning("⚠️ **능력단위 코드 중복 경고: 동일한 코드가 서로 다른 과목에서 사용되고 있습니다.**")
+    st.warning("⚠️ **능력단위 코드 중복 주의:** 동일한 코드가 여러 실무과목에 중복 사용되었습니다.")
     for code, subs in inconsistent_codes.items():
         st.write(f"- 코드 `{code}`: {', '.join(subs)}")
     st.divider()
@@ -112,33 +112,46 @@ cols = st.columns(3)
 col_idx = 0
 
 for subject, target_credits in schedule_credit_map.items():
-    subject_df = df[df["과목명"] == subject]
+    subject_df = df[df["실무과목"] == subject]
     if subject_df.empty:
         continue
         
-    current_total = subject_df["NCS 배정 학점"].sum()
+    current_total = subject_df["NCS 학점"].sum()
+    unit_count = len(subject_df)
     
     with cols[col_idx % 3]:
         if current_total == target_credits:
-            st.success(f"**{subject}**\n\n✅ {current_total} / {target_credits} 학점 (일치)")
+            st.success(f"**{subject}** ({unit_count}개 단위)\n\n✅ {current_total} / {target_credits} 학점 (일치)")
         else:
             validation_passed = False
-            st.error(f"**{subject}**\n\n⚠️ {current_total} / {target_credits} 학점 (불일치! 엑셀 확인 요망)")
+            st.error(f"**{subject}** ({unit_count}개 단위)\n\n⚠️ {current_total} / {target_credits} 학점 (불일치!)")
     col_idx += 1
 
 st.divider()
 
 # 4. Ag-Grid를 통한 데이터 조회
-st.markdown("### 📋 NCS 능력단위 매핑 현황 (조회 전용)")
-st.info("이 데이터는 엑셀 파일에서 자동으로 불러온 값입니다. 수정이 필요하다면 엑셀 파일을 수정한 뒤 다시 업로드 해주세요.")
+st.markdown("### 📋 NCS 실무과목/내용영역 매핑 현황")
+st.info("실무과목을 클릭하여 내부의 내용영역(능력단위) 목록을 확인하세요.")
 
 if not df.empty:
     gb = GridOptionsBuilder.from_dataframe(df.drop(columns=["id"]))
 
-    gb.configure_column("과목명", rowGroup=True, hide=True) # 과목명으로 그룹화
-    gb.configure_column("NCS 배정 학점", type=["numericColumn", "numberColumnFilter"])
-
-    gb.configure_grid_options(groupDefaultExpanded=1) # 기본으로 그룹 펼치기
+    # 그룹화 및 컬럼 설정
+    gb.configure_column("실무과목", rowGroup=True, hide=True)
+    gb.configure_column("내용영역 (능력단위)", minWidth=300)
+    gb.configure_column("능력단위 코드", minWidth=150)
+    gb.configure_column("NCS 학점", type=["numericColumn", "numberColumnFilter"], width=100)
+    
+    # 자동 그룹 컬럼 설정 (그룹 제목에 개수 표시)
+    gb.configure_grid_options(
+        autoGroupColumnDef={
+            "headerName": "실무과목 명칭",
+            "minWidth": 250,
+            "cellRendererParams": {"suppressCount": False}
+        },
+        groupDefaultExpanded=1
+    )
+    
     gridOptions = gb.build()
 
     AgGrid(
@@ -146,10 +159,10 @@ if not df.empty:
         gridOptions=gridOptions,
         fit_columns_on_grid_load=True,
         theme="streamlit",
-        height=500
+        height=600
     )
 
 if not validation_passed:
-    st.warning("⚠️ 편제표 학점과 능력단위 배정 학점이 불일치하는 과목이 있습니다. 엑셀 파일의 '실무과목 능력단위' 시트를 점검 후 재업로드 해주세요.")
+    st.warning("⚠️ 편제표 학점과 능력단위 배정 학점이 불일치하는 과목이 있습니다. 엑셀을 확인해 주세요.")
 else:
-    st.success("🎉 모든 실무과목의 NCS 학점이 편제표와 완벽하게 일치합니다!")
+    st.success("🎉 모든 실무과목의 NCS 매핑이 정상입니다!")
