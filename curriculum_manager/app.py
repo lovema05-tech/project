@@ -278,6 +278,46 @@ elif "담당자" in user_role:
             else:
                 st.success("총 이수학점(192학점) 기준을 정확히 충족했습니다.")
             
+            # 상세 데이터 엑셀 다운로드
+            full_sched_res = supabase.table("curriculum_schedules").select("*, subjects(*)").eq("version_id", v['id']).execute()
+            export_data = []
+            for s in full_sched_res.data:
+                sub = s['subjects']
+                sum_credits = (s['grade_1_sem_1'] or 0) + (s['grade_1_sem_2'] or 0) + \
+                              (s['grade_2_sem_1'] or 0) + (s['grade_2_sem_2'] or 0) + \
+                              (s['grade_3_sem_1'] or 0) + (s['grade_3_sem_2'] or 0)
+                export_data.append({
+                    "필수/선택": "선택" if s.get('is_elective') else "필수",
+                    "교과영역": sub['category'] or "",
+                    "교과군": sub['subject_group'] or "",
+                    "과목명": sub['name'],
+                    "기본 학점": sub.get('base_credits', ""),
+                    "운영가능 학점": sub.get('operable_credits', ""),
+                    "운영 학점": sum_credits,
+                    "1-1": s['grade_1_sem_1'] or 0,
+                    "1-2": s['grade_1_sem_2'] or 0,
+                    "2-1": s['grade_2_sem_1'] or 0,
+                    "2-2": s['grade_2_sem_2'] or 0,
+                    "3-1": s['grade_3_sem_1'] or 0,
+                    "3-2": s['grade_3_sem_2'] or 0,
+                })
+            
+            if export_data:
+                import io
+                export_df = pd.DataFrame(export_data)
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    export_df.to_excel(writer, index=False, sheet_name='편제표')
+                excel_data = output.getvalue()
+                
+                st.download_button(
+                    label=f"📥 {dept_display} 엑셀 다운로드",
+                    data=excel_data,
+                    file_name=f"{selected_year}_{dept_info['name']}_편제표.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key=f"dl_{v['id']}"
+                )
+            
             if v['status'] == 'Submitted':
                 if final_total_credits == 192:
                     if st.button(f"{dept_display} 최종 승인", key=f"btn_{v['id']}", type="primary"):
