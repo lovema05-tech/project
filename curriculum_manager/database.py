@@ -20,11 +20,12 @@ def get_departments():
     response = supabase.table("departments").select("*").execute()
     return response.data
 
-def get_curriculum_version(dept_id, year):
-    """특정 학과/연도의 교육과정 버전 정보를 가져옵니다."""
+def get_curriculum_version(dept_id, year, target_grade=0):
+    """특정 학과/연도/대상학년의 교육과정 버전 정보를 가져옵니다."""
     response = supabase.table("curriculum_versions") \
         .select("*") \
         .eq("department_id", dept_id) \
         .eq("year", year) \
+        .eq("target_grade", target_grade) \
         .execute()
     return response.data[0] if response.data else None
