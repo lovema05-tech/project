@@ -35,19 +35,17 @@ if "부장" in user_role:
         st.warning("등록된 학과가 없습니다. 왼쪽 '엑셀 업로드' 메뉴에서 초기 데이터를 세팅해주세요.")
         st.stop()
         
-    # 학과, 입학년도, 대상 학년 선택
-    col_dept, col_year, col_grade = st.columns(3)
+    # 학과 및 입학년도 선택
+    col_dept, col_year = st.columns(2)
     with col_dept:
         selected_dept_name = st.selectbox("학과 선택", dept_names)
     with col_year:
         selected_year = st.selectbox("기준 연도", [2026, 2025, 2024])
-    with col_grade:
-        selected_grade = st.selectbox("대상 학년", [1, 2, 3], format_func=lambda x: f"{x}학년")
         
     selected_dept = departments[dept_names.index(selected_dept_name)]
     
-    # 선택된 연도 및 학년의 버전 정보 가져오기
-    version = get_curriculum_version(selected_dept['id'], selected_year, selected_grade)
+    # 선택된 입학년도 버전 정보 가져오기
+    version = get_curriculum_version(selected_dept['id'], selected_year)
     
     if version:
         status_color = "status-badge-draft" if version['status'] == 'Draft' else "status-badge-submitted" if version['status'] == 'Submitted' else "status-badge-approved"
@@ -247,16 +245,14 @@ elif "담당자" in user_role:
     col2.metric("결재 대기 중(Submitted)", submitted_count)
     
     st.divider()
-    st.markdown("### 📋 각 학과별 진행 현황 (학년별)")
+    st.markdown("### 📋 각 학과별 진행 현황")
     
     if not all_versions:
         st.info("해당 연도의 교육과정 데이터가 없습니다.")
         
     for v in all_versions:
         dept_info = v['departments']
-        dept_name = f"{dept_info['name']} ({dept_info['course_type']})" if dept_info.get('course_type') else dept_info['name']
-        grade_str = f"{v['target_grade']}학년" if v.get('target_grade') and v['target_grade'] > 0 else "통합본"
-        dept_display = f"{dept_name} - {grade_str}"
+        dept_display = f"{dept_info['name']} ({dept_info['course_type']})" if dept_info.get('course_type') else dept_info['name']
         
         # 필수과목 학점 합계 + 선택과목 인정학점 = 최종 총 학점
         schedules_res = supabase.table("curriculum_schedules").select("*").eq("version_id", v['id']).eq("is_elective", False).execute()

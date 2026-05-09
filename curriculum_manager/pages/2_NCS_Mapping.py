@@ -17,17 +17,15 @@ st.title("🔗 NCS 실무과목 이론/실습 매핑")
 st.markdown("편제표에 편성된 실무과목의 학점을 기준으로, NCS 능력단위별 **이론 학점**과 **실습 학점**을 배분합니다.")
 
 # 1. 버전 선택
-versions_res = supabase.table("curriculum_versions").select("id, year, target_grade, departments(name, course_type)").execute()
+versions_res = supabase.table("curriculum_versions").select("id, year, departments(name, course_type)").execute()
 if not versions_res.data:
     st.warning("등록된 교육과정 버전이 없습니다. 엑셀을 먼저 업로드해주세요.")
     st.stop()
 
-version_options = {}
-for v in versions_res.data:
-    if v['departments']:
-        grade_str = f"{v['target_grade']}학년" if v.get('target_grade') and v['target_grade'] > 0 else "통합본"
-        key = f"{v['year']}학년도 {v['departments']['name']} ({v['departments']['course_type']}) - {grade_str}"
-        version_options[key] = v['id']
+version_options = {
+    f"{v['year']}학년도 {v['departments']['name']} ({v['departments']['course_type']})": v['id']
+    for v in versions_res.data if v['departments']
+}
 
 selected_ver_name = st.selectbox("📌 학과 및 연도 선택", list(version_options.keys()))
 version_id = version_options[selected_ver_name]
