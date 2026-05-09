@@ -38,9 +38,10 @@ if uploaded_file is not None:
                 {"name": "전기전자과", "course_type": "도제"}
             ]
             
-            upload_year = st.selectbox("업로드할 엑셀의 입학년도를 선택하세요", [2026, 2027, 2028, 2025, 2024])
+            upload_year = st.selectbox("업로드할 엑셀의 기준 연도를 선택하세요", [2026, 2027, 2028, 2025, 2024])
+            target_grade = st.selectbox("업로드할 파일의 적용 대상 학년을 선택하세요", [1, 2, 3], format_func=lambda x: f"{x}학년용 교육과정")
             
-            if st.button("데이터베이스에 엑셀 데이터 전체 밀어넣기 (학과 + 편제표 자동 파싱)"):
+            if st.button(f"{target_grade}학년 데이터베이스에 엑셀 데이터 전체 밀어넣기"):
                 with st.spinner("Supabase에 데이터를 저장하는 중... 이 작업은 약 1~2분 정도 소요될 수 있습니다."):
                     # 1. 학과 저장 및 버전 생성
                     for dept in departments:
@@ -51,11 +52,12 @@ if uploaded_file is not None:
                             res = supabase.table("departments").insert(dept).execute()
                             dept_id = res.data[0]['id']
                         
-                        existing_ver = supabase.table("curriculum_versions").select("id").eq("department_id", dept_id).eq("year", upload_year).execute()
+                        existing_ver = supabase.table("curriculum_versions").select("id").eq("department_id", dept_id).eq("year", upload_year).eq("target_grade", target_grade).execute()
                         if not existing_ver.data:
                             supabase.table("curriculum_versions").insert({
                                 "department_id": dept_id,
                                 "year": upload_year,
+                                "target_grade": target_grade,
                                 "framework": "2022 개정",
                                 "status": "Draft"
                             }).execute()
@@ -75,7 +77,7 @@ if uploaded_file is not None:
                                 continue
                             
                             dept_id = dept_res.data[0]['id']
-                            ver_res = supabase.table("curriculum_versions").select("id").eq("department_id", dept_id).eq("year", upload_year).execute()
+                            ver_res = supabase.table("curriculum_versions").select("id").eq("department_id", dept_id).eq("year", upload_year).eq("target_grade", target_grade).execute()
                             version_id = ver_res.data[0]['id']
                             
                             # 기존 스케줄 완전 초기화 (중복 방지 및 깔끔한 재업로드 보장)
@@ -176,7 +178,7 @@ if uploaded_file is not None:
                                 continue
                             
                             dept_id = dept_res.data[0]['id']
-                            ver_res = supabase.table("curriculum_versions").select("id").eq("department_id", dept_id).eq("year", upload_year).execute()
+                            ver_res = supabase.table("curriculum_versions").select("id").eq("department_id", dept_id).eq("year", upload_year).eq("target_grade", target_grade).execute()
                             if not ver_res.data:
                                 continue
                             version_id = ver_res.data[0]['id']

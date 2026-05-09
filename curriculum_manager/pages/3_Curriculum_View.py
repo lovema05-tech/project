@@ -38,55 +38,69 @@ tab1, tab2 = st.tabs(["🏢 학과별 조회", "👥 학년별 조회"])
 with tab1:
     st.subheader("🏢 학과별 교육과정 (3개년)")
     
-    dept_options = {
-        f"{v['departments']['name']} ({v['departments']['course_type']})": v
-        for v in filtered_versions if v['departments']
-    }
+    # 학과명 옵션 생성 (중복 제거)
+    dept_options = {}
+    for v in filtered_versions:
+        if v['departments']:
+            dept_key = f"{v['departments']['name']} ({v['departments']['course_type']})"
+            if dept_key not in dept_options:
+                dept_options[dept_key] = v['departments']['id']
     
     if not dept_options:
         st.info("해당 연도에 등록된 학과가 없습니다.")
     else:
-        selected_dept = st.selectbox("조회할 학과 선택", list(dept_options.keys()))
-        version = dept_options[selected_dept]
+        selected_dept_key = st.selectbox("조회할 학과 선택", list(dept_options.keys()))
+        selected_dept_id = dept_options[selected_dept_key]
         
-        # 데이터 불러오기
-        schedules_res = supabase.table("curriculum_schedules").select("*, subjects(*)").eq("version_id", version['id']).execute()
+        # 선택된 학과의 모든 버전(통합본, 1학년용, 2학년용 등) 가져오기
+        dept_versions = [v['id'] for v in filtered_versions if v['department_id'] == selected_dept_id]
+        
+        # 데이터 불러오기 (in_ 필터 사용)
+        schedules_res = supabase.table("curriculum_schedules").select("*, subjects(*)").in_("version_id", dept_versions).execute()
         
         if not schedules_res.data:
             st.info("해당 학과에 등록된 과목이 없습니다.")
         else:
-            # 데이터 가공
-            view_data = []
+            # 과목별로 학점을 병합하기 위한 딕셔너리
+            subject_dict = {}
             for s in schedules_res.data:
                 sub = s['subjects']
-                view_data.append({
-                    "필수/선택": "선택" if s.get('is_elective') else "필수",
-                    "교과영역": sub['category'] or "",
-                    "교과군": sub['subject_group'] or "",
-                    "과목명": sub['name'],
-                    "기본 학점": sub.get('base_credits', ""),
-                    "운영 학점": (s['grade_1_sem_1'] or 0) + (s['grade_1_sem_2'] or 0) + 
-                                 (s['grade_2_sem_1'] or 0) + (s['grade_2_sem_2'] or 0) + 
-                                 (s['grade_3_sem_1'] or 0) + (s['grade_3_sem_2'] or 0),
-                    "1-1": s['grade_1_sem_1'] or 0,
-                    "1-2": s['grade_1_sem_2'] or 0,
-                    "2-1": s['grade_2_sem_1'] or 0,
-                    "2-2": s['grade_2_sem_2'] or 0,
-                    "3-1": s['grade_3_sem_1'] or 0,
-                    "3-2": s['grade_3_sem_2'] or 0,
-                })
+                sub_id = sub['id']
+                
+                if sub_id not in subject_dict:
+                    subject_dict[sub_id] = {
+                        "필수/선택": "선택" if s.get('is_elective') else "필수",
+                        "교과영역": sub['category'] or "",
+                        "교과군": sub['subject_group'] or "",
+                        "과목명": sub['name'],
+                        "기본 학점": sub.get('base_credits', ""),
+                        "1-1": 0, "1-2": 0, "2-1": 0, "2-2": 0, "3-1": 0, "3-2": 0
+                    }
+                
+                # 학점 누적 (서로 다른 버전에서 동일 과목이 나오면 합산. 단, 일반적으로는 버전마다 학년이 다름)
+                subject_dict[sub_id]["1-1"] += s['grade_1_sem_1'] or 0
+                subject_dict[sub_id]["1-2"] += s['grade_1_sem_2'] or 0
+                subject_dict[sub_id]["2-1"] += s['grade_2_sem_1'] or 0
+                subject_dict[sub_id]["2-2"] += s['grade_2_sem_2'] or 0
+                subject_dict[sub_id]["3-1"] += s['grade_3_sem_1'] or 0
+                subject_dict[sub_id]["3-2"] += s['grade_3_sem_2'] or 0
+            
+            # 최종 데이터 리스트 생성 및 운영 학점 계산
+            view_data = []
+            for sub_data in subject_dict.values():
+                sub_data["운영 학점"] = sum([sub_data["1-1"], sub_data["1-2"], sub_data["2-1"], sub_data["2-2"], sub_data["3-1"], sub_data["3-2"]])
+                view_data.append(sub_data)
             
             df = pd.DataFrame(view_data)
             
-            # 요약 정보
+            # 요약 정보 (학과별 기본값 임시 사용 - 추후 메타데이터 연동 가능)
             total_mandatory = df[df["필수/선택"] == "필수"]["운영 학점"].sum()
-            elective_credits = version.get('elective_credits', 0)
+            elective_credits = 0 # 병합 모델에서는 버전별 학점 관리가 복잡하므로 임시 0
             creative_credits = 18
             final_total = total_mandatory + elective_credits + creative_credits
             
             c1, c2, c3, c4 = st.columns(4)
-            c1.metric("총 이수학점", f"{final_total} / 192")
-            col_idx = 0 # Dummy for grid
+            c1.metric("필수교과 합계", f"{total_mandatory} 학점")
             
             # 테이블 정렬 및 표시
             df = df.sort_values(by=["필수/선택", "교과영역", "교과군"])
@@ -99,9 +113,9 @@ with tab1:
             excel_data = output.getvalue()
             
             st.download_button(
-                label=f"📥 {selected_dept} 엑셀 다운로드",
+                label=f"📥 {selected_dept_key} 엑셀 다운로드",
                 data=excel_data,
-                file_name=f"{selected_year}_{selected_dept}_교육과정.xlsx",
+                file_name=f"{selected_year}_{selected_dept_key}_교육과정.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="dl_dept"
             )
