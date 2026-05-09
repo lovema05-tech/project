@@ -62,9 +62,12 @@ if uploaded_file is not None:
                 st.success("✅ 학과 기초 데이터 확인 완료. 세부 과목 파싱을 시작합니다...")
                     
                 # 2. 각 학과별 편제표 시트 파싱
+                found_any_sheet = False
                 for sheet_name in xls.sheet_names:
-                    if sheet_name.startswith("교육과정편제표 양식"):
-                        dept_name_raw = sheet_name.replace("교육과정편제표 양식(", "").replace(")", "")
+                    # 시트 이름이 '교육과정편제표'로 시작하면 모두 허용 (양식 이라는 단어가 없어도 됨)
+                    if sheet_name.startswith("교육과정편제표"):
+                        found_any_sheet = True
+                        dept_name_raw = sheet_name.replace("교육과정편제표 양식(", "").replace("교육과정편제표(", "").replace(")", "")
                         
                         course_type = "도제" if "도제" in dept_name_raw else "과정평가형"
                         clean_dept_name = dept_name_raw.replace("-도제반", "")
@@ -82,12 +85,23 @@ if uploaded_file is not None:
                         
                         df_sheet = pd.read_excel(xls, sheet_name=sheet_name, header=None)
                         
-                        data_df = df_sheet.iloc[8:].copy()
+                        # 데이터 시작행 동적 탐색 (과목명, 교과영역 등이 있는 행의 다음 행부터)
+                        start_row = 8
+                        for i in range(min(15, len(df_sheet))):
+                            row_vals = [str(x).strip() for x in df_sheet.iloc[i].values if pd.notna(x)]
+                            if any("과목명" in val for val in row_vals) or any("교과영역" in val for val in row_vals):
+                                start_row = i + 1
+                                # 만약 바로 다음 줄이 '공통', '일반선택' 등 헤더의 연속이라면 한 줄 더 내림
+                                next_row_vals = [str(x).strip() for x in df_sheet.iloc[i+1].values if pd.notna(x)]
+                                if "1학기" in next_row_vals or "2학기" in next_row_vals:
+                                    start_row = i + 2
+                                break
+                        
+                        data_df = df_sheet.iloc[start_row:].copy()
                         data_df[[1, 2]] = data_df[[1, 2]].fillna(method='ffill')
                         
                         for idx, row in data_df.iterrows():
-                            domain = str(row[1]).strip()
-                            group = str(row[2]).strip()
+                            domain = str(row[1]).strip() if pd.notna(row[1]) else "nan"
                             
                             # 병합 셀 때문에 과목명이 G(6), F(5), E(4) 중 어디에 있을지 모르므로 오른쪽부터 탐색
                             name_candidates = [str(row[i]).strip() for i in [6, 5, 4] if i < len(row) and pd.notna(row[i]) and str(row[i]).strip() != "nan"]
@@ -110,13 +124,21 @@ if uploaded_file is not None:
                                 base_credits = str(row[7]).replace(".0", "").strip() if len(row) > 7 and pd.notna(row[7]) else "0"
                                 operable_credits = str(row[8]).replace(".0", "").strip() if len(row) > 8 and pd.notna(row[8]) else ""
                                 
-                                # 열 인덱스 수정: 1-1(10), 1-2(11), 2-1(12), 2-2(13), 3-1(14), 3-2(15)
-                                sem_1_1 = int(row[10]) if len(row) > 10 and pd.notna(row[10]) else 0
-                                sem_1_2 = int(row[11]) if len(row) > 11 and pd.notna(row[11]) else 0
-                                sem_2_1 = int(row[12]) if len(row) > 12 and pd.notna(row[12]) else 0
-                                sem_2_2 = int(row[13]) if len(row) > 13 and pd.notna(row[13]) else 0
-                                sem_3_1 = int(row[14]) if len(row) > 14 and pd.notna(row[14]) else 0
-                                sem_3_2 = int(row[15]) if len(row) > 15 and pd.notna(row[15]) else 0
+                                # 연도별로 양식이 다를 경우 학점 컬럼 인덱스 분기 처리
+                                if upload_year == 2026:
+                                    sem_1_1 = int(float(row[10])) if len(row) > 10 and pd.notna(row[10]) else 0
+                                    sem_1_2 = int(float(row[11])) if len(row) > 11 and pd.notna(row[11]) else 0
+                                    sem_2_1 = int(float(row[12])) if len(row) > 12 and pd.notna(row[12]) else 0
+                                    sem_2_2 = int(float(row[13])) if len(row) > 13 and pd.notna(row[13]) else 0
+                                    sem_3_1 = int(float(row[14])) if len(row) > 14 and pd.notna(row[14]) else 0
+                                    sem_3_2 = int(float(row[15])) if len(row) > 15 and pd.notna(row[15]) else 0
+                                else:
+                                    # 2025, 2024 학년도 양식: 2학년/3학년만 표시되며 컬럼이 한 칸씩 띄워져 있음 (10, 12, 14, 16)
+                                    sem_1_1, sem_1_2 = 0, 0
+                                    sem_2_1 = int(float(row[10])) if len(row) > 10 and pd.notna(row[10]) and str(row[10]).strip() != "-" else 0
+                                    sem_2_2 = int(float(row[12])) if len(row) > 12 and pd.notna(row[12]) and str(row[12]).strip() != "-" else 0
+                                    sem_3_1 = int(float(row[14])) if len(row) > 14 and pd.notna(row[14]) and str(row[14]).strip() != "-" else 0
+                                    sem_3_2 = int(float(row[16])) if len(row) > 16 and pd.notna(row[16]) and str(row[16]).strip() != "-" else 0
                             except ValueError:
                                 continue
                             
