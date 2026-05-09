@@ -44,7 +44,7 @@ with tab1:
         if v['departments']:
             dept_key = f"{v['departments']['name']} ({v['departments']['course_type']})"
             if dept_key not in dept_options:
-                dept_options[dept_key] = v['departments']['id']
+                dept_options[dept_key] = v['department_id']
     
     if not dept_options:
         st.info("해당 연도에 등록된 학과가 없습니다.")
