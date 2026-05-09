@@ -102,6 +102,8 @@ if uploaded_file is not None:
                         
                         for idx, row in data_df.iterrows():
                             domain = str(row[1]).strip() if pd.notna(row[1]) else "nan"
+                            group_cands = [str(row[j]).strip() for j in [3, 2] if j < len(row) and pd.notna(row[j]) and str(row[j]).strip() not in ["nan", "None"]]
+                            group = group_cands[0] if group_cands else ""
                             
                             # 병합 셀 때문에 과목명이 G(6), F(5), E(4) 중 어디에 있을지 모르므로 오른쪽부터 탐색
                             name_candidates = [str(row[i]).strip() for i in [6, 5, 4] if i < len(row) and pd.notna(row[i]) and str(row[i]).strip() != "nan"]
