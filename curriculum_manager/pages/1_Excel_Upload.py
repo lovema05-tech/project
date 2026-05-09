@@ -7,7 +7,7 @@ from supabase import create_client, Client
 st.set_page_config(page_title="엑셀 업로드", page_icon="📁", layout="wide")
 
 st.markdown("# 📁 초기 데이터 엑셀 업로드")
-st.write("2026학년도 대양고 교육과정 편제표 엑셀 파일을 업로드하면 데이터베이스가 자동으로 세팅됩니다.")
+st.write("대양고 교육과정 편제표 엑셀 파일을 업로드하면 데이터베이스가 자동으로 세팅됩니다.")
 
 # Supabase 클라이언트 초기화
 @st.cache_resource

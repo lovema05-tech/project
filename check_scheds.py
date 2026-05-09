@@ -6,6 +6,7 @@ key = re.search(r'key\s*=\s*"([^"]+)"', text).group(1)
 from supabase import create_client
 supabase = create_client(url, key)
 
-res = supabase.table('curriculum_versions').select('id, year, target_grade').execute()
-for r in res.data:
-    print(r)
+versions = supabase.table('curriculum_versions').select('id, target_grade').execute().data
+for v in versions:
+    scheds = supabase.table('curriculum_schedules').select('id').eq('version_id', v['id']).execute().data
+    print(f"Target Grade {v['target_grade']}: {len(scheds)} schedules")

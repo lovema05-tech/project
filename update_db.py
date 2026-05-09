@@ -6,6 +6,5 @@ key = re.search(r'key\s*=\s*"([^"]+)"', text).group(1)
 from supabase import create_client
 supabase = create_client(url, key)
 
-res = supabase.table('curriculum_versions').select('id, year, target_grade').execute()
-for r in res.data:
-    print(r)
+res = supabase.table('curriculum_versions').update({'target_grade': 1}).eq('target_grade', 0).execute()
+print('Updated:', len(res.data), 'rows')
