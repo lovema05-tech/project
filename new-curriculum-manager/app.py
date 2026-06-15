@@ -157,8 +157,8 @@ st.markdown("""
 
 # --- Authentication & Login Panel ---
 if "user_email" not in st.session_state:
-    st.session_state.user_email = None
-    st.session_state.user_role = None
+    st.session_state.user_email = st.query_params.get("user_email", None)
+    st.session_state.user_role = st.query_params.get("user_role", None)
 if "force_password_change" not in st.session_state:
     st.session_state.force_password_change = False
 
@@ -184,6 +184,8 @@ if st.session_state.user_email is None:
                     if role:
                         st.session_state.user_email = login_email
                         st.session_state.user_role = role
+                        st.query_params["user_email"] = login_email
+                        st.query_params["user_role"] = role
                         if login_password == "dy6400580":
                             st.session_state.force_password_change = True
                         else:
@@ -216,6 +218,7 @@ if st.sidebar.button("🔓 로그아웃"):
     st.session_state.user_email = None
     st.session_state.user_role = None
     st.session_state.force_password_change = False
+    st.query_params.clear()
     st.rerun()
 
 # Welcome message in sidebar
@@ -471,9 +474,10 @@ if st.session_state.user_role == "student":
 elif st.session_state.user_role == "admin":
     st.subheader("🛡️ 관리자 대시보드")
     
-    admin_tab1, admin_tab2, admin_tab3, admin_tab4 = st.tabs([
+    admin_tab1, admin_tab2, admin_tab3, admin_tab4, admin_tab5 = st.tabs([
         "🏫 과목 및 정원 설정", 
         "📋 과목별 수강 현황", 
+        "⚡ 미신청 강제 배정",
         "👥 학생 및 관리자 추가/관리",
         "📧 취소 알림 이메일 로그"
     ])
@@ -501,7 +505,6 @@ elif st.session_state.user_role == "admin":
         
         options = [c['name'] for c in courses] + ["⚠️ [미신청] 수강신청 미완료 학생 목록"]
         selected_option = st.selectbox("조회 대상을 선택하세요", options)
-        
         if selected_option == "⚠️ [미신청] 수강신청 미완료 학생 목록":
             unenrolled_list = get_unenrolled_students()
             st.write(f"**미신청 학생 수:** {len(unenrolled_list)}명")
@@ -526,6 +529,20 @@ elif st.session_state.user_role == "admin":
                         "질병 조퇴": s['sick_early_leaves']
                     })
                 st.dataframe(pd.DataFrame(rows), use_container_width=True)
+                
+                # Excel Export Button
+                excel_buffer = io.BytesIO()
+                with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                    pd.DataFrame(rows).to_excel(writer, index=False, sheet_name='미신청학생')
+                excel_data = excel_buffer.getvalue()
+                st.download_button(
+                    label="📥 미신청 학생 명단 엑셀 다운로드 (.xlsx)",
+                    data=excel_data,
+                    file_name="미신청_학생_명단.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="dl_unenrolled_students_tab2"
+                )
+                
         else:
             selected_course = next(item for item in courses if item['name'] == selected_option)
             enrolled_list = get_enrollments_by_course(selected_course['id'])
@@ -556,9 +573,104 @@ elif st.session_state.user_role == "admin":
                         "신청 시간": s['created_at']
                     })
                 st.dataframe(pd.DataFrame(rows), use_container_width=True)
+                
+                # Excel Export Button
+                excel_buffer = io.BytesIO()
+                with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                    pd.DataFrame(rows).to_excel(writer, index=False, sheet_name='수강생명단')
+                excel_data = excel_buffer.getvalue()
+                st.download_button(
+                    label=f"📥 {selected_course['name']} 수강생 명단 엑셀 다운로드 (.xlsx)",
+                    data=excel_data,
+                    file_name=f"{selected_course['name']}_수강생_명단.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key=f"dl_enrolled_students_{selected_course['id']}"
+                )
             
-    # Tab 3: Student & Admin Management (New Tab)
+    # Tab 3: Forced Enrollment
     with admin_tab3:
+        st.markdown("### ⚡ 미신청 학생 강제 수강 배정")
+        st.caption("수강신청을 완료하지 않은 미신청 학생들을 조회하고, 특정 과목에 강제로 배정할 수 있습니다.")
+        
+        unenrolled_list = get_unenrolled_students()
+        st.write(f"**현재 미신청 학생 수:** {len(unenrolled_list)}명")
+        
+        if not unenrolled_list:
+            st.success("🎉 모든 학생이 수강신청을 완료하였습니다!")
+        else:
+            rows = []
+            for s in unenrolled_list:
+                score = calculate_attendance_score(s)
+                rows.append({
+                    "학생 이름": s['name'],
+                    "이메일 주소": s['email'],
+                    "학년": s['grade'],
+                    "반": s['class'],
+                    "번호": s['number'],
+                    "출결 점수": score,
+                    "미인정 결석": s['unexcused_absences'],
+                    "미인정 지각": s['unexcused_tardiness'],
+                    "질병 결석": s['sick_absences'],
+                    "질병 지각": s['sick_tardiness'],
+                    "질병 조퇴": s['sick_early_leaves']
+                })
+            st.dataframe(pd.DataFrame(rows), use_container_width=True)
+            
+            # Excel Export Button
+            excel_buffer = io.BytesIO()
+            with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                pd.DataFrame(rows).to_excel(writer, index=False, sheet_name='미신청학생')
+            excel_data = excel_buffer.getvalue()
+            st.download_button(
+                label="📥 미신청 학생 명단 엑셀 다운로드 (.xlsx)",
+                data=excel_data,
+                file_name="미신청_학생_명단.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="dl_unenrolled_students"
+            )
+            
+            st.markdown("---")
+            st.markdown("#### ⚡ 강제 수강 배정 실행")
+            
+            with st.form("admin_force_enroll_form_tab", clear_on_submit=True):
+                col_form1, col_form2 = st.columns(2)
+                with col_form1:
+                    # Create choices for students
+                    student_choices = {
+                        f"[{s['grade']}학년 {s['class']}반 {s['number']}번] {s['name']} ({s['email']})": s
+                        for s in unenrolled_list
+                    }
+                    selected_student_label = st.selectbox("대상 미신청 학생 선택", list(student_choices.keys()), key="force_tab_student")
+                with col_form2:
+                    # Create choices for courses
+                    course_choices = {c['name']: c for c in courses}
+                    selected_course_name = st.selectbox("배정할 과목 선택", list(course_choices.keys()), key="force_tab_course")
+                    
+                submit_force_enroll = st.form_submit_button("강제 배정 실행 📝", type="primary", use_container_width=True)
+                
+                if submit_force_enroll:
+                    target_student = student_choices[selected_student_label]
+                    target_course = course_choices[selected_course_name]
+                    
+                    with st.spinner("수강 배정 처리 중..."):
+                        result = enroll_student(target_student['email'], target_course['id'])
+                        if result['success']:
+                            st.success(result['message'])
+                            if "kicked_student" in result:
+                                ks = result['kicked_student']
+                                st.warning(f"📣 [밀어내기 발생] {ks['name']} 학생이 정원 초과로 인해 수강 취소 처리되었습니다.")
+                                # Send cancellation email
+                                success, msg = send_cancellation_email(ks['email'], ks['name'], ks['course_name'], str(uuid.uuid4()))
+                                if success:
+                                    st.success(f"📧 이메일 통보 완료: {ks['email']}")
+                                else:
+                                    st.error(f"📧 이메일 발송 오류: {msg}")
+                            st.rerun()
+                        else:
+                            st.error(result['message'])
+
+    # Tab 4: Student & Admin Management (New Tab)
+    with admin_tab4:
         st.markdown("### 👥 학생 및 관리자 추가/관리")
         
         sub_tab_student, sub_tab_admin = st.tabs(["🧑‍🎓 학생 관리", "🛡️ 관리자 관리"])
@@ -768,8 +880,52 @@ elif st.session_state.user_role == "admin":
                 except Exception as e:
                     st.error(f"에러: {e}")
                     
-    # Tab 4: Email Log Viewer
-    with admin_tab4:
+    # Tab 5: Email Log Viewer & SMTP Settings
+    with admin_tab5:
+        st.markdown("### ⚙️ SMTP 이메일 발송 서버 설정")
+        st.caption("수강 취소 발생 시 학생들에게 실제 안내 메일을 발송할 SMTP 메일 서버를 구성합니다.")
+        
+        # Load current values from secrets if available
+        try:
+            smtp_secrets = st.secrets.get("smtp", {})
+        except Exception:
+            smtp_secrets = {}
+        curr_server = smtp_secrets.get("server", "smtp.gmail.com")
+        curr_port = int(smtp_secrets.get("port", 587))
+        curr_user = smtp_secrets.get("user", "")
+        curr_pwd = smtp_secrets.get("password", "")
+        
+        import os
+        with st.form("smtp_config_form"):
+            col_smtp1, col_smtp2 = st.columns(2)
+            with col_smtp1:
+                new_server = st.text_input("SMTP 서버 주소", value=curr_server, placeholder="smtp.gmail.com")
+                new_port = st.number_input("SMTP 포트 번호", min_value=1, max_value=65535, value=curr_port)
+            with col_smtp2:
+                new_user = st.text_input("SMTP 사용자 이메일 계정", value=curr_user, placeholder="example@gmail.com")
+                new_pwd = st.text_input("SMTP 비밀번호 (또는 앱 비밀번호)", value=curr_pwd, type="password", placeholder="비밀번호 입력")
+                
+            submit_smtp = st.form_submit_button("SMTP 설정 저장 💾", type="primary", use_container_width=True)
+            
+            if submit_smtp:
+                if not new_server or not new_user or not new_pwd:
+                    st.error("❌ 모든 필드를 입력해 주세요.")
+                else:
+                    secrets_dir = os.path.join(os.path.dirname(__file__), ".streamlit")
+                    os.makedirs(secrets_dir, exist_ok=True)
+                    secrets_path = os.path.join(secrets_dir, "secrets.toml")
+                    
+                    with open(secrets_path, "w", encoding="utf-8") as f:
+                        f.write("[smtp]\n")
+                        f.write(f'server = "{new_server}"\n')
+                        f.write(f'port = {new_port}\n')
+                        f.write(f'user = "{new_user}"\n')
+                        f.write(f'password = "{new_pwd}"\n')
+                        
+                    st.success("🎉 SMTP 설정이 완료되었습니다! 이제 수강 취소 시 실제 메일이 발송됩니다.")
+                    st.rerun()
+                    
+        st.divider()
         st.markdown("### 📧 수강 강제취소 이메일 자동 통보 이력")
         st.caption("정원 초과 및 출결 우선순위 밀어내기에 의해 자동으로 발송 처리된 이메일 통보 내역입니다.")
         
