@@ -8,7 +8,7 @@ from database import (
     cancel_enrollment, get_enrollments_by_course, get_student_enrollment,
     is_admin, add_student, add_admin, get_email_logs, calculate_attendance_score, 
     get_student_sort_key, update_course_capacity, get_unenrolled_students,
-    verify_login, update_password, get_all_students
+    verify_login, update_password, get_all_students, force_enroll_student
 )
 from email_sender import send_cancellation_email
 
@@ -17,7 +17,7 @@ init_db()
 
 # Streamlit Page Config
 st.set_page_config(
-    page_title="대양고등학교 학점제 수강신청 시스템",
+    page_title="학점제 수강신청 시스템",
     page_icon="🏫",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -295,6 +295,10 @@ if st.session_state.user_role == "student":
         st.error("학생 정보가 조회되지 않습니다. 로그아웃 후 다시 시도해 주세요.")
         st.stop()
         
+    # Align dictionary keys with enrollment records for compatibility
+    student_data['student_email'] = student_data['email']
+    student_data['student_name'] = student_data['name']
+        
     # Student Info Display
     st.subheader("🧑‍🎓 학생 프로필 및 출결 상황")
     
@@ -543,6 +547,32 @@ elif st.session_state.user_role == "admin":
                     key="dl_unenrolled_students_tab2"
                 )
                 
+                # --- Admin Forced Assignment Section ---
+                st.markdown("---")
+                st.markdown("#### ⚡ 미신청 학생 강제 과목 배정")
+                st.caption("선택한 미신청 학생을 특정 과목에 즉시 배정합니다. 이 배정은 과목 정원 제한이나 기존 출결 순위를 우회하여 강제로 처리됩니다.")
+                
+                with st.form("admin_force_enroll_form", clear_on_submit=True):
+                    # Student dropdown
+                    student_map = {f"[{s['grade']}학년 {s['class']}반 {s['number']:02d}번] {s['name']} ({s['email']})": s for s in unenrolled_list}
+                    selected_student_key = st.selectbox("강제 배정할 학생 선택", options=list(student_map.keys()))
+                    
+                    # Course dropdown
+                    course_map = {c['name']: c for c in courses}
+                    selected_course_name = st.selectbox("배정할 과목 선택", options=list(course_map.keys()))
+                    
+                    submit_btn = st.form_submit_button("강제 과목 배정 실행 ⚡", type="primary", use_container_width=True)
+                    
+                    if submit_btn:
+                        student = student_map[selected_student_key]
+                        course = course_map[selected_course_name]
+                        
+                        if force_enroll_student(student['email'], course['id']):
+                            st.success(f"🎉 {student['name']} 학생이 '{course['name']}' 과목에 강제로 배정되었습니다.")
+                            st.toast("강제 배정 성공", icon="⚡")
+                            st.rerun()
+                        else:
+                            st.error("강제 배정 처리 중 오류가 발생했습니다.")
         else:
             selected_course = next(item for item in courses if item['name'] == selected_option)
             enrolled_list = get_enrollments_by_course(selected_course['id'])

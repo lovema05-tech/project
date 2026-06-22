@@ -445,6 +445,32 @@ def cancel_enrollment(student_email, course_id):
     finally:
         conn.close()
 
+def force_enroll_student(student_email, course_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        # Cancel any existing active enrollment for this student
+        cursor.execute("""
+            UPDATE enrollments 
+            SET status = 'Cancelled' 
+            WHERE student_email = ? AND status = 'Registered'
+        """, (student_email,))
+        
+        # Insert forced registration
+        enrollment_id = str(uuid.uuid4())
+        cursor.execute("""
+            INSERT INTO enrollments (id, student_email, course_id, status, created_at)
+            VALUES (?, ?, ?, 'Registered', CURRENT_TIMESTAMP)
+        """, (enrollment_id, student_email, course_id))
+        
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Error in force_enroll_student: {e}")
+        return False
+    finally:
+        conn.close()
+
 def get_email_logs():
     conn = get_connection()
     cursor = conn.cursor()
